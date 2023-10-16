@@ -12,6 +12,7 @@
     "types": "./types/phaser.d.ts",
     "browser": "./dist/phaser.js",
     "module": "./dist/phaser.esm.js",
+    "sideEffects": true,
     "repository": {
         "type": "git",
         "url": "https://photonstorm@github.com/photonstorm/phaser.git"

@@ -9,6 +9,7 @@ var EventEmitter = require('eventemitter3');
 var GameObjectFactory = require('../gameobjects/GameObjectFactory');
 var GetFastValue = require('../utils/object/GetFastValue');
 var SceneEvents = require('../scene/events');
+var Events = require('./events');
 
 /**
  * @classdesc
@@ -80,12 +81,13 @@ var SceneEvents = require('../scene/events');
  * {@link Phaser.Types.Time.TimelineEventConfig} typedef for more details.
  *
  * @class Timeline
+ * @extends Phaser.Events.EventEmitter
  * @memberof Phaser.Time
  * @constructor
  * @since 3.60.0
  *
  * @param {Phaser.Scene} scene - The Scene which owns this Timeline.
- * @param {Phaser.Types.Time.TimelineEventConfig|Phaser.Types.Time.TimelineEventConfig[]} config - The configuration object for this Timeline Event, or an array of them.
+ * @param {Phaser.Types.Time.TimelineEventConfig|Phaser.Types.Time.TimelineEventConfig[]} [config] - The configuration object for this Timeline Event, or an array of them.
  */
 var Timeline = new Class({
 
@@ -231,6 +233,7 @@ var Timeline = new Class({
      * If the `TimelineEvent.target` property is set then the Timeline invokes the `run` method on that target.
      *
      * @method Phaser.Time.Timeline#update
+     * @fires Phaser.Time.Events#COMPLETE
      * @since 3.60.0
      *
      * @param {number} time - The current time. Either a High Resolution Timer value if it comes from Request Animation Frame, or Date.now if using SetTimeout.
@@ -238,7 +241,7 @@ var Timeline = new Class({
      */
     update: function ()
     {
-        if (this.paused)
+        if (this.paused || this.complete)
         {
             return;
         }
@@ -258,6 +261,16 @@ var Timeline = new Class({
                 event.complete = true;
 
                 this.totalComplete++;
+
+                target = (event.target) ? event.target : this;
+
+                if (event.if)
+                {
+                    if (!event.if.call(target, event))
+                    {
+                        continue;
+                    }
+                }
 
                 if (event.once)
                 {
@@ -289,8 +302,6 @@ var Timeline = new Class({
                         sys.sound.play(event.sound.key, event.sound.config);
                     }
                 }
-
-                target = (event.target) ? event.target : this;
 
                 if (event.event)
                 {
@@ -326,6 +337,11 @@ var Timeline = new Class({
         if (this.totalComplete >= events.length)
         {
             this.complete = true;
+        }
+
+        if (this.complete)
+        {
+            this.emit(Events.COMPLETE, this);
         }
     },
 
@@ -368,6 +384,8 @@ var Timeline = new Class({
      * If the Timeline is paused while processing the current game step, then it
      * will carry on with all events that are due to run during that step and pause
      * from the next game step.
+     *
+     * Note that if any Tweens have been started prior to calling this method, they will **not** be paused as well.
      *
      * @method Phaser.Time.Timeline#pause
      * @since 3.60.0
@@ -510,6 +528,7 @@ var Timeline = new Class({
             events.push({
                 complete: false,
                 time: startTime,
+                if: GetFastValue(entry, 'if', null),
                 run: GetFastValue(entry, 'run', null),
                 event: GetFastValue(entry, 'event', null),
                 target: GetFastValue(entry, 'target', null),

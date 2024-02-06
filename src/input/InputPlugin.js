@@ -784,6 +784,7 @@ var InputPlugin = new Class({
         if (input)
         {
             this.removeDebug(gameObject);
+            this.manager.resetCursor(input);
 
             input.gameObject = undefined;
             input.target = undefined;
@@ -832,20 +833,12 @@ var InputPlugin = new Class({
             input.dragState = 0;
         }
 
-        // Clear from _temp, _drag and _over
-        var temp = this._temp;
+        // Clear from _drag and _over
         var drag = this._drag;
         var over = this._over;
         var manager = this.manager;
 
-        var index = temp.indexOf(gameObject);
-
-        if (index > -1)
-        {
-            temp.splice(index, 1);
-        }
-
-        for (var i = 0; i < manager.pointersTotal; i++)
+        for (var i = 0, index; i < manager.pointersTotal; i++)
         {
             index = drag[i].indexOf(gameObject);
 
@@ -859,8 +852,6 @@ var InputPlugin = new Class({
             if (index > -1)
             {
                 over[i].splice(index, 1);
-
-                manager.resetCursor(input);
             }
         }
 
@@ -2491,6 +2482,8 @@ var InputPlugin = new Class({
 
             debug.preUpdate = function ()
             {
+                debug.setVisible(gameObject.visible);
+
                 debug.setStrokeStyle(1 / gameObject.scale, debug.strokeColor);
 
                 debug.setDisplayOrigin(gameObject.displayOriginX, gameObject.displayOriginY);
@@ -2547,8 +2540,7 @@ var InputPlugin = new Class({
         {
             var debug = input.hitAreaDebug;
 
-            this.systems.updateList.remove(debug);
-
+            //  This will remove it from both the display list and update list
             debug.destroy();
 
             input.hitAreaDebug = null;

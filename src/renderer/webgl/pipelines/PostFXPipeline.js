@@ -227,12 +227,21 @@ var PostFXPipeline = new Class({
         if (this.renderer.isBooted)
         {
             this.manager = this.renderer.pipelines;
-
-            this.boot();
         }
     },
 
-    boot: function ()
+    /**
+     * This method is called once, when this Post FX Pipeline needs to be used.
+     *
+     * Normally, pipelines will boot automatically, ready for instant-use, but Post FX
+     * Pipelines create quite a lot of internal resources, such as Render Targets, so
+     * they don't boot until they are told to do so by the Pipeline Manager, when an
+     * actual Game Object needs to use them.
+     *
+     * @method Phaser.Renderer.WebGL.Pipelines.PostFXPipeline#bootFX
+     * @since 3.70.0
+     */
+    bootFX: function ()
     {
         WebGLPipeline.prototype.boot.call(this);
 
@@ -243,7 +252,11 @@ var PostFXPipeline = new Class({
         this.halfFrame1 = utility.halfFrame1;
         this.halfFrame2 = utility.halfFrame2;
 
+        var renderer = this.renderer;
+
         this.set1i('uMainSampler', 0);
+        this.set2f('uResolution', renderer.width, renderer.height);
+        this.set1i('uRoundPixels', renderer.config.roundPixels);
 
         var targets = this.renderTargets;
 
@@ -251,6 +264,39 @@ var PostFXPipeline = new Class({
         {
             targets[i].autoResize = true;
         }
+    },
+
+    /**
+     * This method is called as a result of the `WebGLPipeline.batchQuad` method, right after a quad
+     * belonging to a Game Object has been added to the batch. When this is called, the
+     * renderer has just performed a flush.
+     *
+     * It calls the `onDraw` hook followed by the `onPostBatch` hook, which can be used to perform
+     * additional Post FX Pipeline processing.
+     *
+     * It is also called as part of the `PipelineManager.postBatch` method when processing Post FX Pipelines.
+     *
+     * @method Phaser.Renderer.WebGL.Pipelines.PostFXPipeline#postBatch
+     * @since 3.70.0
+     *
+     * @param {(Phaser.GameObjects.GameObject|Phaser.Cameras.Scene2D.Camera)} [gameObject] - The Game Object or Camera that invoked this pipeline, if any.
+     *
+     * @return {this} This WebGLPipeline instance.
+     */
+    postBatch: function (gameObject)
+    {
+        if (!this.hasBooted)
+        {
+            this.bootFX();
+        }
+        else
+        {
+            this.onDraw(this.currentRenderTarget);
+        }
+
+        this.onPostBatch(gameObject);
+
+        return this;
     },
 
     onDraw: function (renderTarget)
@@ -307,12 +353,12 @@ var PostFXPipeline = new Class({
         var gl = this.gl;
 
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, source.texture);
+        gl.bindTexture(gl.TEXTURE_2D, source.texture.webGLTexture);
 
         var currentFBO = gl.getParameter(gl.FRAMEBUFFER_BINDING);
 
-        gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target.texture, 0);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer.webGLFramebuffer);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target.texture.webGLTexture, 0);
 
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
@@ -526,8 +572,8 @@ var PostFXPipeline = new Class({
         if (target)
         {
             gl.viewport(0, 0, target.width, target.height);
-            gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target.texture, 0);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer.webGLFramebuffer);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target.texture.webGLTexture, 0);
 
             if (clear)
             {
@@ -556,7 +602,7 @@ var PostFXPipeline = new Class({
         renderer.restoreStencilMask();
 
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, source.texture);
+        gl.bindTexture(gl.TEXTURE_2D, source.texture.webGLTexture);
 
         gl.bufferData(gl.ARRAY_BUFFER, this.vertexData, gl.STATIC_DRAW);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -564,7 +610,7 @@ var PostFXPipeline = new Class({
         if (target)
         {
             gl.bindTexture(gl.TEXTURE_2D, null);
-            gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.currentFramebuffer);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.currentFramebuffer.webGLFramebuffer);
         }
     },
 
@@ -590,6 +636,8 @@ var PostFXPipeline = new Class({
         this.fullFrame2 = null;
         this.halfFrame1 = null;
         this.halfFrame2 = null;
+
+        this.manager.removePostPipeline(this);
 
         WebGLPipeline.prototype.destroy.call(this);
 

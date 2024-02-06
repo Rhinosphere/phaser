@@ -42,7 +42,9 @@ var WebGLPipeline = require('../WebGLPipeline');
  * The default shader uniforms for this pipeline are:
  *
  * `uProjectionMatrix` (mat4)
- * `uMainSampler` (sampler2D array)
+ * `uRoundPixels` (int)
+ * `uResolution` (vec2)
+ * `uMainSampler` (sampler2D, or sampler2D array)
  *
  * If you wish to create a custom pipeline extending from this one, you can use two string
  * declarations in your fragment shader source: `%count%` and `%forloop%`, where `count` is
@@ -277,7 +279,11 @@ var MultiPipeline = new Class({
     {
         WebGLPipeline.prototype.boot.call(this);
 
-        this.currentShader.set1iv('uMainSampler', this.renderer.textureIndexes);
+        var renderer = this.renderer;
+
+        this.set1iv('uMainSampler', renderer.textureIndexes);
+        this.set2f('uResolution', renderer.width, renderer.height);
+        this.set1i('uRoundPixels', renderer.config.roundPixels);
     },
 
     /**
@@ -369,12 +375,6 @@ var MultiPipeline = new Class({
         var gx = gameObject.x;
         var gy = gameObject.y;
 
-        // if (camera.roundPixels)
-        // {
-        //     gx = Math.floor(gx);
-        //     gy = Math.floor(gy);
-        // }
-
         spriteMatrix.applyITRS(gx, gy, gameObject.rotation, gameObject.scaleX * flipX, gameObject.scaleY * flipY);
 
         camMatrix.copyFrom(camera.matrix);
@@ -397,7 +397,7 @@ var MultiPipeline = new Class({
         //  Multiply by the Sprite matrix, store result in calcMatrix
         camMatrix.multiply(spriteMatrix, calcMatrix);
 
-        var quad = calcMatrix.setQuad(x, y, x + frameWidth, y + frameHeight, camera.roundPixels);
+        var quad = calcMatrix.setQuad(x, y, x + frameWidth, y + frameHeight);
 
         var getTint = Utils.getTintAppendFloatAlpha;
         var cameraAlpha = camera.alpha;
@@ -416,6 +416,8 @@ var MultiPipeline = new Class({
 
         this.manager.preBatch(gameObject);
 
+        this.currentShader.set1i('uRoundPixels', camera.roundPixels);
+
         this.batchQuad(gameObject, quad[0], quad[1], quad[2], quad[3], quad[4], quad[5], quad[6], quad[7], u0, v0, u1, v1, tintTL, tintTR, tintBL, tintBR, gameObject.tintFill, texture, unit);
 
         this.manager.postBatch(gameObject);
@@ -428,7 +430,7 @@ var MultiPipeline = new Class({
      * @since 3.0.0
      *
      * @param {Phaser.GameObjects.GameObject} gameObject - Source GameObject.
-     * @param {WebGLTexture} texture - Raw WebGLTexture associated with the quad.
+     * @param {Phaser.Renderer.WebGL.Wrappers.WebGLTextureWrapper} texture - Texture associated with the quad.
      * @param {number} textureWidth - Real texture width.
      * @param {number} textureHeight - Real texture height.
      * @param {number} srcX - X coordinate of the quad.
@@ -458,7 +460,8 @@ var MultiPipeline = new Class({
      * @param {Phaser.Cameras.Scene2D.Camera} camera - Current used camera.
      * @param {Phaser.GameObjects.Components.TransformMatrix} parentTransformMatrix - Parent container.
      * @param {boolean} [skipFlip=false] - Skip the renderTexture check.
-     * @param {number} [textureUnit] - Use the currently bound texture unit?
+     * @param {number} [textureUnit] - The texture unit to set (defaults to currently bound if undefined or null)
+     * @param {boolean} [skipPrePost=false] - Skip the pre and post manager calls?
      */
     batchTexture: function (
         gameObject,
@@ -477,8 +480,11 @@ var MultiPipeline = new Class({
         camera,
         parentTransformMatrix,
         skipFlip,
-        textureUnit)
+        textureUnit,
+        skipPrePost)
     {
+        if (skipPrePost === undefined) { skipPrePost = false; }
+
         this.manager.set(this, gameObject);
 
         var camMatrix = this._tempMatrix1;
@@ -549,12 +555,6 @@ var MultiPipeline = new Class({
             y += srcHeight;
         }
 
-        // if (camera.roundPixels)
-        // {
-        //     srcX = Math.floor(srcX);
-        //     srcY = Math.floor(srcY);
-        // }
-
         spriteMatrix.applyITRS(srcX, srcY, rotation, scaleX, scaleY);
 
         camMatrix.copyFrom(camera.matrix);
@@ -577,22 +577,23 @@ var MultiPipeline = new Class({
         //  Multiply by the Sprite matrix, store result in calcMatrix
         camMatrix.multiply(spriteMatrix, calcMatrix);
 
-        var quad = calcMatrix.setQuad(x, y, x + width, y + height, camera.roundPixels);
+        var quad = calcMatrix.setQuad(x, y, x + width, y + height);
 
-        if (textureUnit === undefined)
+        if (textureUnit === undefined || textureUnit === null)
         {
-            // textureUnit = this.renderer.setTexture2D(texture);
             textureUnit = this.setTexture2D(texture);
         }
 
-        if (gameObject)
+        if (gameObject && !skipPrePost)
         {
             this.manager.preBatch(gameObject);
         }
 
+        this.currentShader.set1i('uRoundPixels', camera.roundPixels);
+
         this.batchQuad(gameObject, quad[0], quad[1], quad[2], quad[3], quad[4], quad[5], quad[6], quad[7], u0, v0, u1, v1, tintTL, tintTR, tintBL, tintBR, tintEffect, texture, textureUnit);
 
-        if (gameObject)
+        if (gameObject && !skipPrePost)
         {
             this.manager.postBatch(gameObject);
         }
@@ -634,7 +635,7 @@ var MultiPipeline = new Class({
             calcMatrix = spriteMatrix;
         }
 
-        var quad = calcMatrix.setQuad(x, y, x + frame.width, y + frame.height, false);
+        var quad = calcMatrix.setQuad(x, y, x + frame.width, y + frame.height);
 
         var unit = this.setTexture2D(frame.source.glTexture);
 
@@ -670,7 +671,7 @@ var MultiPipeline = new Class({
             parentMatrix.multiply(currentMatrix, calcMatrix);
         }
 
-        var quad = calcMatrix.setQuad(x, y, x + width, y + height, false);
+        var quad = calcMatrix.setQuad(x, y, x + width, y + height);
 
         var tint = this.fillTint;
 
@@ -716,6 +717,8 @@ var MultiPipeline = new Class({
         var ty2 = calcMatrix.getY(x2, y2);
 
         var tint = this.fillTint;
+
+        this.currentShader.set1i('uRoundPixels', false);
 
         this.batchTri(null, tx0, ty0, tx1, ty1, tx2, ty2, 0, 0, 1, 1, tint.TL, tint.TR, tint.BL, 2);
     },
@@ -807,6 +810,8 @@ var MultiPipeline = new Class({
 
         polygonIndexArray = Earcut(polygonCache);
         length = polygonIndexArray.length;
+
+        this.currentShader.set1i('uRoundPixels', false);
 
         for (var index = 0; index < length; index += 3)
         {
@@ -960,6 +965,8 @@ var MultiPipeline = new Class({
         var tintTR = tint.TR;
         var tintBL = tint.BL;
         var tintBR = tint.BR;
+
+        this.currentShader.set1i('uRoundPixels', false);
 
         //  TL, BL, BR, TR
         this.batchQuad(null, tlX, tlY, blX, blY, brX, brY, trX, trY, 0, 0, 1, 1, tintTL, tintTR, tintBL, tintBR, 2);

@@ -19,6 +19,7 @@ var GetFastValue = require('../utils/object/GetFastValue');
 var GEOM_CONST = require('../geom/const');
 var InputPluginCache = require('./InputPluginCache');
 var IsPlainObject = require('../utils/object/IsPlainObject');
+var HasAny = require('../utils/object/HasAny');
 var PluginCache = require('../plugins/PluginCache');
 var Rectangle = require('../geom/rectangle/Rectangle');
 var RectangleContains = require('../geom/rectangle/Contains');
@@ -2159,25 +2160,30 @@ var InputPlugin = new Class({
         var customHitArea = true;
 
         //  Config object?
-        if (IsPlainObject(hitArea))
+        if (IsPlainObject(hitArea) && Object.keys(hitArea).length)
         {
             var config = hitArea;
 
-            hitArea = GetFastValue(config, 'hitArea', null);
-            hitAreaCallback = GetFastValue(config, 'hitAreaCallback', null);
+            // Check if any supplied Game Object is a Mesh based Game Object
+            if (!HasAny(gameObjects, 'faces'))
+            {
+                hitArea = GetFastValue(config, 'hitArea', null);
+                hitAreaCallback = GetFastValue(config, 'hitAreaCallback', null);
+
+                pixelPerfect = GetFastValue(config, 'pixelPerfect', false);
+                var alphaTolerance = GetFastValue(config, 'alphaTolerance', 1);
+
+                if (pixelPerfect)
+                {
+                    hitArea = {};
+                    hitAreaCallback = this.makePixelPerfect(alphaTolerance);
+                }
+            }
+
             draggable = GetFastValue(config, 'draggable', false);
             dropZone = GetFastValue(config, 'dropZone', false);
             cursor = GetFastValue(config, 'cursor', false);
             useHandCursor = GetFastValue(config, 'useHandCursor', false);
-
-            pixelPerfect = GetFastValue(config, 'pixelPerfect', false);
-            var alphaTolerance = GetFastValue(config, 'alphaTolerance', 1);
-
-            if (pixelPerfect)
-            {
-                hitArea = {};
-                hitAreaCallback = this.makePixelPerfect(alphaTolerance);
-            }
 
             //  Still no hitArea or callback?
             if (!hitArea || !hitAreaCallback)
@@ -2185,11 +2191,6 @@ var InputPlugin = new Class({
                 this.setHitAreaFromTexture(gameObjects);
                 customHitArea = false;
             }
-        }
-        else if (typeof hitArea === 'function' && !hitAreaCallback)
-        {
-            hitAreaCallback = hitArea;
-            hitArea = {};
         }
 
         for (var i = 0; i < gameObjects.length; i++)
